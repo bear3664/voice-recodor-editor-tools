@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ブラウザ音声レコーダー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #DCE2E9;
+    --surface: #F2F4F7;
+    --ink: #1E2833;
+    --muted: #5B6875;
+    --line: #B9C3CE;
+    --rec: #D7263D;
+    --tab: #23798A;
+    --mic: #B87D0E;
+    --meter-bg: #C9D1DA;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161C23; --surface: #1F2730; --ink: #E4E9EF; --muted: #93A0AD;
+      --line: #36424F; --rec: #F0435A; --tab: #4DB3C4; --mic: #E2A93A; --meter-bg: #2C3641;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161C23; --surface: #1F2730; --ink: #E4E9EF; --muted: #93A0AD;
+    --line: #36424F; --rec: #F0435A; --tab: #4DB3C4; --mic: #E2A93A; --meter-bg: #2C3641;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 16px; line-height: 1.7;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  .back {
+    display: inline-flex; align-items: center; gap: .35rem; margin: 0 0 1rem; padding: .2rem .8rem .2rem .6rem;
+    font-size: .85rem; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: 999px;
+  }
+  .back:hover { color: var(--ink); border-color: var(--ink); }
+  .back:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 .25rem; letter-spacing: .02em; }
+  .lead { color: var(--muted); margin: 0 0 2rem; font-size: .95rem; }
+
+  .console {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    padding: 1.5rem; display: grid; gap: 1.25rem;
+  }
+  .channel { display: grid; grid-template-columns: 7.5rem 1fr; gap: .5rem 1rem; align-items: center; }
+  .channel + .channel { border-top: 1px solid var(--line); padding-top: 1.25rem; }
+  .ch-name { font-weight: 700; display: flex; align-items: center; gap: .5rem; }
+  .ch-name .dot { width: .7rem; height: .7rem; border-radius: 50%; background: var(--c); flex: none; }
+  .ch-tab { --c: var(--tab); }
+  .ch-mic { --c: var(--mic); }
+  .ch-status { color: var(--muted); font-size: .85rem; }
+
+  .meter { height: 10px; background: var(--meter-bg); border-radius: 5px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--c); transition: width 60ms linear; }
+  .ch-off .meter i { background: var(--muted); }
+
+  .row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .row label { font-size: .85rem; color: var(--muted); }
+  input[type=range] { flex: 1; min-width: 8rem; accent-color: var(--c); }
+
+  .switch { position: relative; display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; font-size: .9rem; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { width: 2.75rem; height: 1.5rem; border-radius: 1rem; background: var(--meter-bg); position: relative; transition: background .15s; }
+  .switch .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: calc(1.5rem - 6px); height: calc(1.5rem - 6px);
+    border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--mic); }
+  .switch input:checked + .track::after { transform: translateX(1.25rem); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .transport { display: flex; align-items: center; gap: 1.5rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
+  .rec-btn {
+    width: 5.5rem; height: 5.5rem; border-radius: 50%; border: 3px solid var(--rec); background: transparent;
+    display: grid; place-items: center; cursor: pointer; flex: none; padding: 0;
+  }
+  .rec-btn span { width: 3.4rem; height: 3.4rem; border-radius: 50%; background: var(--rec); transition: border-radius .2s, width .2s, height .2s; }
+  .rec-btn.recording span { width: 2rem; height: 2rem; border-radius: 6px; }
+  .rec-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .rec-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .timer { font-size: 2.4rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
+  .state { color: var(--muted); font-size: .9rem; margin-top: .35rem; }
+  .recording-now .state { color: var(--rec); }
+
+  .msg { margin: 1rem 0 0; padding: .75rem 1rem; border-radius: 10px; border: 1px solid var(--rec); color: var(--ink); font-size: .9rem; display: none; }
+  .msg.show { display: block; }
+
+  h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; }
+  .empty { color: var(--muted); font-size: .9rem; }
+  ul.takes { list-style: none; margin: 0; padding: 0; }
+  ul.takes li { padding: 1rem 0; border-bottom: 1px solid var(--line); display: grid; gap: .5rem; }
+  .take-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-size: .9rem; }
+  .take-head .meta { color: var(--muted); }
+  audio { width: 100%; }
+  .take-actions { display: flex; gap: 1rem; }
+  .take-actions a, .take-actions button {
+    font: inherit; font-size: .9rem; color: var(--ink); background: none; border: 1px solid var(--line);
+    border-radius: 8px; padding: .3rem .8rem; cursor: pointer; text-decoration: none;
+  }
+  .take-actions a:focus-visible, .take-actions button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  details { margin-top: 2.5rem; font-size: .9rem; color: var(--muted); }
+  summary { cursor: pointer; color: var(--ink); }
+  details ul { padding-left: 1.2rem; }
+
+  @media (max-width: 480px) {
+    .channel { grid-template-columns: 1fr; }
+    .timer { font-size: 2rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html"><span aria-hidden="true">←</span>トップへ戻る</a>
+  <h1>ブラウザ音声レコーダー</h1>
+  <p class="lead">選んだタブの音声を録音します。マイクの音声を重ねて録ることもできます。</p>
+
+  <section class="console" id="console">
+    <div class="channel ch-tab" id="chTab">
+      <div class="ch-name"><span class="dot"></span>タブ音声</div>
+      <div class="meter" aria-hidden="true"><i id="meterTab"></i></div>
+      <div class="ch-status" id="tabStatus">録音開始時に選択</div>
+      <div class="row">
+        <label for="tabVol">音量</label>
+        <input type="range" id="tabVol" min="0" max="150" value="100">
+      </div>
+    </div>
+
+    <div class="channel ch-mic ch-off" id="chMic">
+      <div class="ch-name"><span class="dot"></span>マイク</div>
+      <div class="meter" aria-hidden="true"><i id="meterMic"></i></div>
+      <div class="ch-status">
+        <label class="switch">
+          <input type="checkbox" id="micToggle">
+          <span class="track"></span>
+          <span id="micLabel">オフ</span>
+        </label>
+      </div>
+      <div class="row">
+        <label for="micVol">音量</label>
+        <input type="range" id="micVol" min="0" max="150" value="100">
+      </div>
+    </div>
+
+    <div class="channel" id="chQuality">
+      <div class="ch-name">音質</div>
+      <div class="row">
+        <select id="quality" aria-label="録音の音質" style="font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.3rem .5rem;max-width:100%">
+          <option value="high">高音質（ステレオ・192kbps）約1.4MB/分</option>
+          <option value="std" selected>標準（ステレオ・96kbps）約0.7MB/分</option>
+          <option value="long">長時間向け（モノラル・48kbps）約0.36MB/分</option>
+        </select>
+      </div>
+      <div class="ch-status" style="grid-column:1/-1">会議や講義など、声が中心なら「長時間向け」で十分です。録音中は変更できません。</div>
+    </div>
+
+    <div class="transport" id="transport">
+      <button class="rec-btn" id="recBtn" aria-label="録音開始"><span></span></button>
+      <div>
+        <div class="timer" id="timer">00:00</div>
+        <div class="state" id="state">ボタンを押すと共有するタブを選べます</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="msg" id="msg" role="alert"></p>
+
+  <h2>録音したもの</h2>
+  <p class="empty" id="empty">まだ録音はありません。</p>
+  <ul class="takes" id="takes"></ul>
+
+  <details>
+    <summary>うまく録れないとき</summary>
+    <ul>
+      <li>共有ダイアログで「タブ」を選び、「タブの音声も共有する」をオンにしてください。</li>
+      <li>Chrome または Edge を使ってください。Firefox と Safari はタブ音声の共有に対応していません。</li>
+      <li>マイクをオンにするときはヘッドホンを使うと、スピーカーの音がマイクに回り込みません。</li>
+      <li>マイクはいつでもオン・オフを切り替えられます。録音中に切り替えた場合も反映されます。</li>
+      <li>共有を停止すると、録音も自動で終わります。</li>
+    </ul>
+  </details>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const recBtn = $('recBtn'), timerEl = $('timer'), stateEl = $('state'), msgEl = $('msg');
+  const micToggle = $('micToggle'), micLabel = $('micLabel'), chMic = $('chMic');
+  const tabVol = $('tabVol'), micVol = $('micVol'), tabStatus = $('tabStatus');
+  const meterTab = $('meterTab'), meterMic = $('meterMic');
+  const takesEl = $('takes'), emptyEl = $('empty'), consoleEl = $('console');
+
+  let ctx = null, sink = null;
+  let displayStream = null, tabSrc = null, tabGain = null, tabAnalyser = null;
+  let micStream = null, micSrc = null, micGain = null, micAnalyser = null;
+  let dest = null, recorder = null, chunks = [];
+  let startTime = 0, timerId = null, takeCount = 0;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) {
+    showMsg('このブラウザは画面共有による録音に対応していません。パソコン版の Chrome か Edge で開いてください。');
+    recBtn.disabled = true;
+  }
+
+  function showMsg(text) { msgEl.textContent = text; msgEl.classList.add('show'); }
+  function clearMsg() { msgEl.classList.remove('show'); }
+
+  function ensureCtx() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      sink = ctx.createGain();
+      sink.gain.value = 0;              // 解析用。スピーカーには出さない
+      sink.connect(ctx.destination);
+      requestAnimationFrame(drawMeters);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // ---- メーター ----
+  const buf = new Float32Array(2048);
+  function level(analyser) {
+    if (!analyser) return 0;
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-8);
+    return Math.max(0, Math.min(1, (db + 60) / 60));
+  }
+  function drawMeters() {
+    meterTab.style.width = (level(tabAnalyser) * 100) + '%';
+    meterMic.style.width = (level(micAnalyser) * 100) + '%';
+    requestAnimationFrame(drawMeters);
+  }
+
+  // ---- 音量 ----
+  tabVol.addEventListener('input', () => { if (tabGain) tabGain.gain.value = tabVol.value / 100; });
+  micVol.addEventListener('input', () => { if (micGain) micGain.gain.value = micVol.value / 100; });
+
+  // ---- マイク ON/OFF ----
+  micToggle.addEventListener('change', async () => {
+    if (micToggle.checked) {
+      try {
+        await enableMic();
+        clearMsg();
+      } catch (e) {
+        micToggle.checked = false;
+        showMsg('マイクを使えませんでした。ブラウザのアドレスバー付近にあるマイクの許可設定を確認してください。');
+      }
+    } else {
+      disableMic();
+    }
+    updateMicUI();
+  });
+
+  function updateMicUI() {
+    const on = micToggle.checked;
+    micLabel.textContent = on ? (recorder && recorder.state === 'recording' ? 'オン（録音中）' : 'オン') : 'オフ';
+    chMic.classList.toggle('ch-off', !on);
+  }
+
+  async function enableMic() {
+    ensureCtx();
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    micSrc = ctx.createMediaStreamSource(micStream);
+    micGain = ctx.createGain();
+    micGain.gain.value = micVol.value / 100;
+    micAnalyser = ctx.createAnalyser();
+    micAnalyser.fftSize = 2048;
+    micSrc.connect(micGain);
+    micGain.connect(micAnalyser);
+    micAnalyser.connect(sink);
+    if (dest) micGain.connect(dest);   // 録音中なら即座にミックスへ
+  }
+
+  function disableMic() {
+    if (micGain) { try { micGain.disconnect(); } catch (e) {} }
+    if (micAnalyser) { try { micAnalyser.disconnect(); } catch (e) {} }
+    if (micSrc) { try { micSrc.disconnect(); } catch (e) {} }
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    micStream = micSrc = micGain = micAnalyser = null;
+  }
+
+  // ---- 録音 ----
+  recBtn.addEventListener('click', () => {
+    if (recorder && recorder.state === 'recording') stopRecording();
+    else startRecording();
+  });
+
+  function pickMime() {
+    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    return types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  async function startRecording() {
+    clearMsg();
+    ensureCtx();
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include',
+        selfBrowserSurface: 'exclude'
+      });
+    } catch (e) {
+      stateEl.textContent = '共有がキャンセルされました';
+      return;
+    }
+
+    const audioTracks = displayStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      displayStream.getTracks().forEach(t => t.stop());
+      displayStream = null;
+      showMsg('タブの音声が共有されていません。もう一度録音ボタンを押し、共有ダイアログで「タブの音声も共有する」をオンにしてください。');
+      stateEl.textContent = 'ボタンを押すと共有するタブを選べます';
+      return;
+    }
+
+    // 共有停止で録音も終了
+    displayStream.getTracks().forEach(t => t.addEventListener('ended', () => {
+      if (recorder && recorder.state === 'recording') stopRecording();
+    }));
+
+    const Q = { high: { bps: 192000, mono: false }, std: { bps: 96000, mono: false }, long: { bps: 48000, mono: true } };
+    const q = Q[$('quality').value] || Q.std;
+    dest = ctx.createMediaStreamDestination();
+    if (q.mono) { dest.channelCount = 1; dest.channelCountMode = 'explicit'; dest.channelInterpretation = 'speakers'; }
+
+    tabSrc = ctx.createMediaStreamSource(new MediaStream(audioTracks));
+    tabGain = ctx.createGain();
+    tabGain.gain.value = tabVol.value / 100;
+    tabAnalyser = ctx.createAnalyser();
+    tabAnalyser.fftSize = 2048;
+    tabSrc.connect(tabGain);
+    tabGain.connect(tabAnalyser);
+    tabAnalyser.connect(sink);
+    tabGain.connect(dest);
+
+    if (micGain) micGain.connect(dest);
+
+    tabStatus.textContent = '共有中';
+
+    const mimeType = pickMime();
+    recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType, audioBitsPerSecond: q.bps } : { audioBitsPerSecond: q.bps });
+    chunks = [];
+    recorder.addEventListener('dataavailable', e => { if (e.data && e.data.size) chunks.push(e.data); });
+    recorder.addEventListener('stop', () => finishTake(recorder.mimeType || mimeType));
+    recorder.start(1000);
+
+    startTime = performance.now();
+    timerId = setInterval(tick, 250);
+    tick();
+    recBtn.classList.add('recording');
+    recBtn.setAttribute('aria-label', '録音停止');
+    consoleEl.classList.add('recording-now');
+    stateEl.textContent = '録音中';
+    $('quality').disabled = true;
+    updateMicUI();
+  }
+
+  function stopRecording() {
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    clearInterval(timerId);
+
+    if (micGain && dest) { try { micGain.disconnect(dest); } catch (e) {} }
+    [tabSrc, tabGain, tabAnalyser].forEach(n => { if (n) { try { n.disconnect(); } catch (e) {} } });
+    tabSrc = tabGain = tabAnalyser = null;
+    if (displayStream) displayStream.getTracks().forEach(t => t.stop());
+    displayStream = null;
+    dest = null;
+
+    recBtn.classList.remove('recording');
+    recBtn.setAttribute('aria-label', '録音開始');
+    consoleEl.classList.remove('recording-now');
+    stateEl.textContent = '録音を保存しました';
+    $('quality').disabled = false;
+    tabStatus.textContent = '録音開始時に選択';
+    updateMicUI();
+  }
+
+  function fmt(sec) {
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    const h = Math.floor(m / 60);
+    const mm = String(m % 60).padStart(2, '0'), ss = String(s).padStart(2, '0');
+    return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+  function tick() { timerEl.textContent = fmt((performance.now() - startTime) / 1000); }
+
+  function stamp(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+
+  function finishTake(mime) {
+    const type = (mime || 'audio/webm').split(';')[0];
+    const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+    const blob = new Blob(chunks, { type });
+    chunks = [];
+    const url = URL.createObjectURL(blob);
+    const now = new Date();
+    const duration = fmt((performance.now() - startTime) / 1000);
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+    takeCount++;
+
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="take-head">
+        <strong>録音 ${takeCount}</strong>
+        <span class="meta">${now.toLocaleTimeString('ja-JP')}／${duration}／${sizeMB} MB</span>
+      </div>
+      <audio controls src="${url}"></audio>
+      <div class="take-actions">
+        <a href="${url}" download="recording-${stamp(now)}.${ext}">ダウンロード</a>
+        <button type="button">削除</button>
+      </div>`;
+    li.querySelector('button').addEventListener('click', () => {
+      URL.revokeObjectURL(url);
+      li.remove();
+      emptyEl.style.display = takesEl.children.length ? 'none' : '';
+    });
+    takesEl.prepend(li);
+    emptyEl.style.display = 'none';
+  }
+
+  window.addEventListener('beforeunload', e => {
+    if (recorder && recorder.state === 'recording') { e.preventDefault(); e.returnValue = ''; }
+  });
+})();
+</script>
+</body>
+</html>

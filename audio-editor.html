@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>音声エディター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #DCE2E9;
+    --surface: #F2F4F7;
+    --ink: #1E2833;
+    --muted: #5B6875;
+    --line: #B9C3CE;
+    --rec: #D7263D;
+    --tab: #23798A;
+    --mic: #B87D0E;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161C23; --surface: #1F2730; --ink: #E4E9EF; --muted: #93A0AD;
+      --line: #36424F; --rec: #F0435A; --tab: #4DB3C4; --mic: #E2A93A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161C23; --surface: #1F2730; --ink: #E4E9EF; --muted: #93A0AD;
+    --line: #36424F; --rec: #F0435A; --tab: #4DB3C4; --mic: #E2A93A;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 16px; line-height: 1.7;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  .back {
+    display: inline-flex; align-items: center; gap: .35rem; margin: 0 0 1rem; padding: .2rem .8rem .2rem .6rem;
+    font-size: .85rem; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: 999px;
+  }
+  .back:hover { color: var(--ink); border-color: var(--ink); }
+  .back:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 .25rem; letter-spacing: .02em; }
+  .lead { color: var(--muted); margin: 0 0 1.5rem; font-size: .95rem; }
+
+  input[type=range] { accent-color: var(--c, var(--tab)); }
+
+  details { margin-top: 2.5rem; font-size: .9rem; color: var(--muted); }
+  summary { cursor: pointer; color: var(--ink); }
+  details ul { padding-left: 1.2rem; }
+
+  /* ---- shared buttons ---- */
+  .btn {
+    font: inherit; font-size: .88rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: .38rem .8rem; cursor: pointer; white-space: nowrap; text-decoration: none;
+    display: inline-block; line-height: 1.5;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--ink); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 700; }
+  .btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+  /* ---- editor ---- */
+  .ed-empty {
+    border: 2px dashed var(--line); border-radius: 18px; padding: 3rem 1.5rem; text-align: center; color: var(--muted);
+  }
+  .ed-empty strong { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: .35rem; }
+  .ed-empty .btn { margin-top: 1rem; }
+  .ed-empty.dragover { border-color: var(--tab); background: var(--surface); }
+
+  .toolbar {
+    display: grid; gap: .75rem; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1rem;
+  }
+  .tb-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .35rem; }
+  .grow { flex: 1; }
+  .timecode { font-variant-numeric: tabular-nums; font-weight: 500; min-width: 9.5rem; margin-left: .5rem; }
+  .num {
+    width: 4.5rem; font: inherit; font-size: .88rem; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: .25rem .4rem;
+  }
+  .num:focus-visible, .th-name:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .quality-row { margin-bottom: 1rem; }
+  .sel {
+    font: inherit; font-size: .88rem; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: .3rem .5rem;
+  }
+  .sel:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .tb-label { font-size: .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: .4rem; }
+  .zoom { display: inline-flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
+  .zoom input { flex: none; width: 9rem; min-width: 0; }
+  .check { display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; cursor: pointer; }
+  .check input { accent-color: var(--tab); }
+  .hint { color: var(--muted); font-size: .85rem; margin: .75rem 0 0; }
+  .toast {
+    margin: 0 0 1rem; padding: .6rem 1rem; border-radius: 10px; border: 1px solid var(--mic);
+    font-size: .9rem; background: var(--surface);
+  }
+
+  .tl {
+    display: flex; margin-top: 1rem; border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; background: var(--surface);
+  }
+  .tl-head { flex: none; width: 210px; border-right: 1px solid var(--line); background: var(--surface); }
+  .tl-head-top {
+    height: 28px; border-bottom: 1px solid var(--line); background: var(--bg); font-size: .75rem;
+    color: var(--muted); padding: 0 .75rem; display: flex; align-items: center;
+  }
+  .th {
+    height: 104px; padding: .4rem .6rem; border-bottom: 1px solid var(--line); border-left: 4px solid var(--c);
+    display: grid; align-content: center; gap: .3rem; cursor: pointer;
+  }
+  .th.active { background: var(--bg); }
+  .th-r1, .th-r2, .th-r3 { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+  .th-name {
+    flex: 1; min-width: 0; font: inherit; font-size: .85rem; font-weight: 700; color: var(--ink);
+    background: transparent; border: 1px solid transparent; border-radius: 6px; padding: .1rem .3rem;
+  }
+  .th-name:hover { border-color: var(--line); }
+  .th-del {
+    flex: none; width: 1.6rem; height: 1.6rem; line-height: 1; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); cursor: pointer; font-size: 1rem; padding: 0;
+  }
+  .th-del:hover { border-color: var(--rec); color: var(--rec); }
+  .th-del:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .th-vol { flex: 1; min-width: 0; }
+  .th-volv { flex: none; width: 2.8rem; text-align: right; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .th-r3 .btn { padding: .15rem .55rem; font-size: .78rem; }
+  .th-r3 label { font-size: .78rem; color: var(--muted); display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; }
+  .th-off { width: 3.6rem; padding: .1rem .3rem; font-size: .8rem; }
+
+  .tl-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; position: relative; }
+  .tl-spacer { position: relative; }
+  #tlCanvas { position: sticky; left: 0; display: block; cursor: crosshair; touch-action: none; }
+  #tlCanvas:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  @media (max-width: 640px) {
+    .tl-head { width: 170px; }
+    .zoom input { width: 6rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html"><span aria-hidden="true">←</span>トップへ戻る</a>
+  <h1>音声エディター</h1>
+  <p class="lead">録音した音声を、カット・音量調整・トラックの重ね合わせで編集します。ファイルはこのパソコンの中だけで処理され、ネットには送信されません。</p>
+
+  <!-- ================= 編集 ================= -->
+  <section id="panelEdit">
+    <div class="toast" id="edMsg" role="status" hidden></div>
+    <input type="file" id="fileInput" accept="audio/*,video/mp4,video/webm" multiple hidden>
+
+    <div class="tb-row quality-row">
+      <label class="tb-label" for="quality">読み込み品質
+        <select id="quality" class="sel">
+          <option value="light" selected>軽量（16kHz・モノラル）― 長時間の録音向け</option>
+          <option value="std">標準（元の音質）</option>
+        </select>
+      </label>
+      <span class="tb-label">変更は、このあとに読み込むファイルから反映されます</span>
+    </div>
+
+    <div class="ed-empty" id="edEmpty">
+      <strong>編集する音声がありません</strong>
+      録音アプリで保存した音声（WebM など）を、ここにドロップしてください。
+      <div><button class="btn primary" id="btnOpenEmpty" type="button">音声ファイルを選ぶ</button></div>
+    </div>
+
+    <div id="edMain" hidden>
+      <div class="toolbar">
+        <div class="tb-row">
+          <button class="btn primary" id="btnPlay" type="button">再生</button>
+          <button class="btn" id="btnPlaySel" type="button">選択範囲を再生</button>
+          <button class="btn" id="btnHome" type="button">先頭へ</button>
+          <button class="btn" id="btnBack" type="button" title="5秒戻る（←）">« 5秒</button>
+          <button class="btn" id="btnFwd" type="button" title="5秒進む（→）">5秒 »</button>
+          <span class="timecode" id="edTime" aria-live="off">0:00.0 / 0:00.0</span>
+          <label class="check" title="クリップを動かすとき、他のクリップの端・再生位置・0秒に吸い付きます（Alt を押している間は無効）"><input type="checkbox" id="chkSnap" checked>吸着</label>
+          <label class="zoom" for="seek">再生位置<input type="range" id="seek" min="0" max="1000" value="0" step="1"></label>
+          <span class="grow"></span>
+          <label class="zoom" for="zoom">拡大<input type="range" id="zoom" min="0" max="100" value="49"></label>
+        </div>
+        <div class="tb-row">
+          <button class="btn" id="btnUndo" type="button">元に戻す</button>
+          <button class="btn" id="btnRedo" type="button">やり直す</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnCut" type="button">削除（詰める）</button>
+          <button class="btn" id="btnSilence" type="button">無音にする</button>
+          <button class="btn" id="btnTrim" type="button">範囲だけ残す</button>
+          <button class="btn" id="btnSplit" type="button">再生位置で分割</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnFadeIn" type="button">フェードイン</button>
+          <button class="btn" id="btnFadeOut" type="button">フェードアウト</button>
+        </div>
+        <div class="tb-row">
+          <label class="tb-label" for="gainDb">範囲の音量
+            <input class="num" type="number" id="gainDb" value="3" step="1" min="-40" max="24"> dB
+          </label>
+          <button class="btn" id="btnGain" type="button">適用</button>
+          <button class="btn" id="btnNorm" type="button">トラックを正規化</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnAdd" type="button">音声ファイルを追加</button>
+          <button class="btn" id="btnAddLane" type="button">空のトラックを追加</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnCopy" type="button" title="Ctrl+C">コピー</button>
+          <button class="btn" id="btnCutClip" type="button" title="Ctrl+X">切り取り</button>
+          <button class="btn" id="btnPaste" type="button" title="Ctrl+V">貼り付け</button>
+          <label class="tb-label" for="clipOff">クリップの開始
+            <input class="num" type="number" id="clipOff" min="0" step="0.1" value=""> 秒
+          </label>
+        </div>
+        <div class="tb-row">
+          <label class="tb-label" for="speed">速度
+            <input class="num" type="number" id="speed" value="1.25" step="0.05" min="0.25" max="4"> 倍
+          </label>
+          <select class="sel" id="speedMode" aria-label="速度変更の方式">
+            <option value="keep" selected>ピッチ維持</option>
+            <option value="vary">ピッチも変化</option>
+          </select>
+          <button class="btn" id="btnSpeed" type="button">速度を適用</button>
+          <span class="sep"></span>
+          <label class="tb-label" for="pitch">ピッチ
+            <input class="num" type="number" id="pitch" value="2" step="1" min="-12" max="12"> 半音
+          </label>
+          <button class="btn" id="btnPitch" type="button">ピッチを適用</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnReverse" type="button">逆再生にする</button>
+          <span class="tb-label">範囲を選ぶとその範囲だけ、選ばないとトラック全体に適用します</span>
+        </div>
+        <div class="tb-row">
+          <span class="tb-label">EQ</span>
+          <label class="tb-label" for="eqLow">低域<input class="num" type="number" id="eqLow" value="0" step="1" min="-24" max="24">dB</label>
+          <label class="tb-label" for="eqMid">中域<input class="num" type="number" id="eqMid" value="0" step="1" min="-24" max="24">dB</label>
+          <label class="tb-label" for="eqHigh">高域<input class="num" type="number" id="eqHigh" value="0" step="1" min="-24" max="24">dB</label>
+          <label class="tb-label" for="hpf">ローカット<input class="num" type="number" id="hpf" value="0" step="10" min="0" max="1000">Hz</label>
+          <button class="btn" id="btnEq" type="button">EQを適用</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnNoiseProf" type="button">選択範囲をノイズ見本にする</button>
+          <label class="tb-label" for="nrLevel">強さ
+            <select class="sel" id="nrLevel">
+              <option value="1">弱</option>
+              <option value="1.8" selected>中</option>
+              <option value="2.8">強</option>
+            </select>
+          </label>
+          <button class="btn" id="btnDenoise" type="button">ノイズを除去</button>
+          <span class="tb-label" id="nrState">ノイズ見本: 未登録</span>
+        </div>
+        <div class="tb-row">
+          <span class="grow"></span>
+          <label class="check"><input type="checkbox" id="chkNorm">書き出し時に音量を揃える</label>
+          <label class="tb-label" for="fmt">形式
+            <select class="sel" id="fmt">
+              <option value="wav" selected>WAV</option>
+              <option value="mp3">MP3（128kbps）</option>
+              <option value="mp3hq">MP3（192kbps）</option>
+            </select>
+          </label>
+          <button class="btn primary" id="btnExport" type="button">WAVで書き出す</button>
+        </div>
+      </div>
+
+      <p class="hint">波形をドラッグで範囲選択／ルーラーをクリックで再生位置を移動／クリップ上部の名前の帯をドラッグで移動（左右＝時間、上下＝別のトラックへ。「吸着」がオンなら、他のクリップの端・再生位置・0秒にぴったり揃います。Alt を押している間は吸着しません。いちばん下の空きに落とすと新しいトラックを作ります）。Shift を押しながら波形をドラッグしても移動できます。</p>
+
+      <div class="tl" id="tl">
+        <div class="tl-head" id="tlHead">
+          <div class="tl-head-top">トラック</div>
+          <div id="tlRows"></div>
+        </div>
+        <div class="tl-scroll" id="tlScroll">
+          <div class="tl-spacer" id="tlSpacer">
+            <canvas id="tlCanvas" tabindex="0" aria-label="波形タイムライン。クリップ上部の帯をドラッグで移動。スペースで再生、左右キーで5秒移動、Deleteで選択範囲を削除、Sで再生位置で分割"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <details>
+        <summary>編集のヒント</summary>
+        <ul>
+          <li>ショートカット：スペース＝再生／停止、Delete＝選択範囲を削除、S＝再生位置で分割、Ctrl（Mac は ⌘）＋Z＝元に戻す、Ctrl＋Shift＋Z＝やり直す。波形をクリックしてから使ってください。</li>
+          <li>「削除（詰める）」は選んだ範囲を切り取り、後ろの音を前に詰めます。長さを変えたくないときは「無音にする」を使います。</li>
+          <li>フェードイン・フェードアウトは、選択した範囲全体にかかります。</li>
+          <li>別の音声ファイルを追加すると新しいトラックになります。クリップの帯をドラッグするか「クリップの開始」の秒数で、位置を決められます。</li>
+          <li>コピー／切り取り／貼り付け：範囲を選んでいればその範囲、選んでいなければクリップ全体が対象です（Ctrl＋C／X／V）。貼り付けは再生位置に入り、同じトラックで重なる場合は下のトラックに入ります。</li>
+          <li>音量・ミュートはトラック単位です。トラックの×は、そのトラックのクリップごと削除します（元に戻せます）。</li>
+          <li>書き出しはミュート中のトラックを除いたミックスです。MP3 で書き出すときは、エンコーダーを一度だけネットから取得します（音声は送信されません）。</li>
+          <li>ノイズ除去：ノイズだけが鳴っている区間（話し始める前の無音など、0.2秒以上）を範囲選択して「ノイズ見本にする」を押し、除去したい範囲（未選択ならトラック全体）に「ノイズを除去」を使います。</li>
+          <li>速度・ピッチ・EQ・ノイズ除去は、範囲を選ぶとその範囲だけ、選ばないとトラック全体に適用されます。いずれも「元に戻す」で戻せます。</li>
+          <li>再生位置は、ルーラーのクリック、「再生位置」のスライダー、「« 5秒」「5秒 »」、キーボードの ←／→（Shift で1秒）で動かせます。</li>
+          <li>読み込み品質が「軽量」だと、16kHz・モノラルに変換して読み込みます。メモリと時間が大きく減り、文字起こし用途には十分な音質です。書き出す音声も同じ品質になります。音楽など音質を保ちたいときは「標準」にしてください。</li>
+          <li>「標準」で1時間を超える録音を読み込むと、動作が重くなることがあります。</li>
+        </ul>
+      </details>
+    </div>
+  </section>
+</main>
+
+<script>
+/* =====================================================================
+   エディター
+   ===================================================================== */
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const RULER_H = 28, ROW_H = 104, STRIP = 16;
+  const MID_OFF = 4 + STRIP + (ROW_H - 8 - STRIP) / 2;
+  const COLORS = ['#2A8FA3', '#C98A12', '#9B5FC4', '#3F9A57', '#CF5A78', '#5879D1'];
+
+  const canvas = $('tlCanvas'), scrollEl = $('tlScroll'), spacer = $('tlSpacer'), rowsEl = $('tlRows');
+  const panelEdit = $('panelEdit'), zoomEl = $('zoom'), toastEl = $('edMsg'), timeEl = $('edTime');
+  const fileInput = $('fileInput'), seekEl = $('seek');
+  let seeking = false, noiseProf = null;
+
+  let edCtx = null;
+  const getCtx = () => edCtx || (edCtx = new (window.AudioContext || window.webkitAudioContext)());
+
+  let tracks = [];
+  let history = [{ t: [], l: [] }], hidx = 0;
+  let nextId = 1;
+  let active = -1;               // 選択中のクリップ（tracks の添字）
+  let lanes = [];               // トラック（行）：{name, vol, mute, color}
+  let curLane = -1;             // 選択中のトラック（行）
+  let clipboard = null;
+  let drag = null;
+  let sel = null;               // {start, end} 秒（タイムライン上）。active トラックに対する選択
+  let playhead = 0;
+  let pps = 60;                 // 1秒あたりのピクセル数
+
+  /* ---------- ユーティリティ ---------- */
+  const zoomToPps = v => 10 * Math.pow(40, v / 100);
+  const ppsToZoom = p => 100 * Math.log(p / 10) / Math.log(40);
+  function fmtT(t) {
+    const r = Math.round(Math.max(0, t) * 10) / 10;
+    const m = Math.floor(r / 60), s = r - m * 60;
+    return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+  }
+  function fmtTick(t, step) {
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return step < 1 ? `${m}:${s.toFixed(1).padStart(4, '0')}` : `${m}:${String(Math.round(s)).padStart(2, '0')}`;
+  }
+  const laneOf = c => lanes[c.lane] || { vol: 1, mute: false, color: c.color };
+  function totalDur() { return tracks.reduce((m, t) => Math.max(m, t.offset + t.buffer.duration), 0); }
+  let toastTimer = 0;
+  function toast(text, sticky) {
+    toastEl.textContent = text; toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    if (!sticky) toastTimer = setTimeout(() => { toastEl.hidden = true; }, 10000);
+  }
+  function stampName(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+
+  /* ---------- 履歴 ---------- */
+  const snap = () => ({ t: tracks.map(t => ({ ...t })), l: lanes.map(l => ({ ...l })) });
+  function commit(skipHeaders) {
+    history = history.slice(0, hidx + 1);
+    history.push(snap());
+    if (history.length > 60) history.shift();
+    hidx = history.length - 1;
+    afterChange(!skipHeaders);
+  }
+  function restore(i) {
+    stopPlay();
+    hidx = i;
+    tracks = history[i].t.map(t => ({ ...t }));
+    lanes = history[i].l.map(l => ({ ...l }));
+    if (active >= tracks.length) active = tracks.length - 1;
+    if (curLane >= lanes.length) curLane = lanes.length - 1;
+    sel = null;
+    afterChange(true);
+  }
+  function undo() { if (hidx > 0) restore(hidx - 1); }
+  function redo() { if (hidx < history.length - 1) restore(hidx + 1); }
+
+  function afterChange(rebuild) {
+    if (rebuild && playing) stopPlay();
+    const has = lanes.length > 0;
+    $('edEmpty').hidden = has;
+    $('edMain').hidden = !has;
+    if (rebuild) renderHeaders();
+    layout(); refreshButtons(); draw(); updateTime();
+  }
+  function layout() {
+    spacer.style.width = Math.max(scrollEl.clientWidth, totalDur() * pps + 120) + 'px';
+  }
+
+  /* ---------- トラックヘッダー ---------- */
+  function renderHeaders() {
+    rowsEl.innerHTML = '';
+    lanes.forEach((L, i) => {
+      const d = document.createElement('div');
+      d.className = 'th' + (i === curLane ? ' active' : '');
+      d.style.setProperty('--c', L.color);
+      d.innerHTML =
+        '<div class="th-r1"><input class="th-name" aria-label="トラック名"><button class="th-del" type="button" aria-label="トラックを削除" title="トラックを削除">×</button></div>' +
+        '<div class="th-r2"><input class="th-vol" type="range" min="0" max="200" aria-label="トラックの音量"><span class="th-volv"></span></div>' +
+        '<div class="th-r3"><button class="btn th-mute" type="button"></button></div>';
+      const name = d.querySelector('.th-name'), del = d.querySelector('.th-del');
+      const vol = d.querySelector('.th-vol'), volv = d.querySelector('.th-volv');
+      const mute = d.querySelector('.th-mute');
+      name.value = L.name;
+      vol.value = Math.round(L.vol * 100); volv.textContent = vol.value + '%';
+      const setMuteUI = () => { mute.textContent = L.mute ? 'ミュート中' : 'ミュート'; mute.setAttribute('aria-pressed', String(L.mute)); };
+      setMuteUI();
+
+      d.addEventListener('pointerdown', () => selectLane(i));
+      name.addEventListener('change', () => { L.name = name.value.trim() || L.name; name.value = L.name; commit(true); });
+      del.addEventListener('click', e => {
+        e.stopPropagation(); stopPlay();
+        tracks = tracks.filter(c => c.lane !== i);
+        tracks.forEach(c => { if (c.lane > i) c.lane--; });
+        lanes.splice(i, 1);
+        active = -1; sel = null;
+        curLane = Math.min(curLane, lanes.length - 1);
+        commit();
+      });
+      vol.addEventListener('input', () => {
+        L.vol = vol.value / 100; volv.textContent = vol.value + '%';
+        liveGain(i); draw();
+      });
+      vol.addEventListener('change', () => commit(true));
+      mute.addEventListener('click', () => {
+        L.mute = !L.mute; setMuteUI(); liveGain(i); commit(true); draw();
+      });
+      rowsEl.appendChild(d);
+    });
+  }
+  function markLane() { [...rowsEl.children].forEach((c, k) => c.classList.toggle('active', k === curLane)); }
+  function setActive(i) {
+    if (i === active) return;
+    active = i; sel = null;
+    if (i >= 0) curLane = tracks[i].lane;
+    markLane(); refreshButtons(); draw();
+  }
+  function selectLane(i) {
+    curLane = i;
+    if (!(active >= 0 && tracks[active].lane === i)) { active = tracks.findIndex(c => c.lane === i); sel = null; }
+    markLane(); refreshButtons(); draw();
+  }
+
+  /* ---------- ボタン状態 ---------- */
+  function activeTrack() { return active >= 0 ? tracks[active] : null; }
+  function selSamples(tr) {
+    if (!tr || !sel || sel.end - sel.start < 0.005) return null;
+    const sr = tr.buffer.sampleRate;
+    const a = Math.max(0, Math.round((sel.start - tr.offset) * sr));
+    const b = Math.min(tr.buffer.length, Math.round((sel.end - tr.offset) * sr));
+    return b - a > 0 ? [a, b] : null;
+  }
+  function refreshButtons() {
+    const tr = activeTrack();
+    const hasSel = !!selSamples(tr);
+    $('btnUndo').disabled = hidx <= 0;
+    $('btnRedo').disabled = hidx >= history.length - 1;
+    ['btnCut', 'btnSilence', 'btnTrim', 'btnFadeIn', 'btnFadeOut', 'btnGain', 'btnPlaySel'].forEach(id => { $(id).disabled = !hasSel; });
+    $('btnSplit').disabled = !tr;
+    $('btnNorm').disabled = !tr;
+    $('btnCopy').disabled = !tr; $('btnCutClip').disabled = !tr; $('btnPaste').disabled = !clipboard;
+    const co = $('clipOff');
+    co.disabled = !tr;
+    if (document.activeElement !== co) co.value = tr ? tr.offset.toFixed(1) : '';
+    ['btnSpeed', 'btnPitch', 'btnReverse', 'btnEq'].forEach(id => { $(id).disabled = !tr; });
+    $('btnNoiseProf').disabled = !hasSel;
+    $('btnDenoise').disabled = !tr || !noiseProf;
+    $('btnExport').disabled = tracks.length === 0;
+  }
+
+  /* ---------- 波形ピーク ---------- */
+  const PEAK_B = 128;
+  const peakCache = new WeakMap();
+  function getPeaks(buf) {
+    let p = peakCache.get(buf);
+    if (p) return p;
+    const n = Math.ceil(buf.length / PEAK_B);
+    const min = new Float32Array(n), max = new Float32Array(n);
+    const chs = [];
+    for (let c = 0; c < buf.numberOfChannels; c++) chs.push(buf.getChannelData(c));
+    for (let b = 0; b < n; b++) {
+      let lo = 1, hi = -1;
+      const s0 = b * PEAK_B, s1 = Math.min(buf.length, s0 + PEAK_B);
+      for (let c = 0; c < chs.length; c++) {
+        const d = chs[c];
+        for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      }
+      min[b] = lo; max[b] = hi;
+    }
+    p = { min, max };
+    peakCache.set(buf, p);
+    return p;
+  }
+
+  /* ---------- 描画 ---------- */
+  let scrollRaf = 0;
+  scrollEl.addEventListener('scroll', () => {
+    if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; draw(); });
+  });
+  new ResizeObserver(() => { if (!panelEdit.hidden) { layout(); draw(); } }).observe(scrollEl);
+
+  function draw() {
+    if (panelEdit.hidden || $('edMain').hidden) return;
+    const W = scrollEl.clientWidth || 800;
+    const moving = !!(drag && drag.mode === 'move' && drag.moved);
+    const rowsN = lanes.length + (moving ? 1 : 0);
+    const H = RULER_H + rowsN * ROW_H;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(W * dpr), ch = Math.round(H * dpr);
+    if (canvas.width !== cw || canvas.height !== ch) {
+      canvas.width = cw; canvas.height = ch;
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    }
+    spacer.style.height = H + 'px';
+    const g = canvas.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cs = getComputedStyle(document.documentElement);
+    const C = {};
+    ['bg', 'surface', 'line', 'ink', 'muted', 'rec'].forEach(k => { C[k] = cs.getPropertyValue('--' + k).trim(); });
+    const sc = scrollEl.scrollLeft;
+
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = C.surface; g.fillRect(0, 0, W, H);
+    g.fillStyle = C.bg; g.fillRect(0, 0, W, RULER_H);
+
+    // ルーラー
+    const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
+    const step = steps.find(s => s * pps >= 80) || 3600;
+    g.font = '11px "Zen Kaku Gothic New", sans-serif';
+    g.textBaseline = 'middle';
+    const k0 = Math.floor(sc / pps / step), k1 = Math.ceil((sc + W) / pps / step);
+    for (let k = k0; k <= k1; k++) {
+      const t = k * step, x = Math.round(t * pps - sc) + 0.5;
+      g.strokeStyle = C.muted; g.globalAlpha = 0.7;
+      g.beginPath(); g.moveTo(x, RULER_H - 8); g.lineTo(x, RULER_H); g.stroke();
+      g.globalAlpha = 1; g.fillStyle = C.muted;
+      g.fillText(fmtTick(t, step), x + 4, RULER_H / 2 - 1);
+    }
+    g.strokeStyle = C.line;
+    g.beginPath(); g.moveTo(0, RULER_H - 0.5); g.lineTo(W, RULER_H - 0.5); g.stroke();
+
+    // トラック行
+    for (let i = 0; i < rowsN; i++) {
+      const y0 = RULER_H + i * ROW_H;
+      if (i === curLane) { g.globalAlpha = 0.06; g.fillStyle = C.ink; g.fillRect(0, y0, W, ROW_H); g.globalAlpha = 1; }
+      g.globalAlpha = 0.25; g.strokeStyle = C.muted;
+      g.beginPath(); g.moveTo(0, y0 + MID_OFF + 0.5); g.lineTo(W, y0 + MID_OFF + 0.5); g.stroke();
+      g.globalAlpha = 1;
+      g.strokeStyle = C.line;
+      g.beginPath(); g.moveTo(0, y0 + ROW_H - 0.5); g.lineTo(W, y0 + ROW_H - 0.5); g.stroke();
+      if (i >= lanes.length) {
+        g.globalAlpha = 0.6; g.fillStyle = C.muted; g.textBaseline = 'middle';
+        g.fillText('ここに落とすと新しいトラックになります', 12, y0 + ROW_H / 2);
+        g.globalAlpha = 1;
+      }
+    }
+    tracks.forEach((tr, i) => { if (i !== active) drawClip(g, tr, RULER_H + tr.lane * ROW_H, sc, W, C, false); });
+    if (active >= 0 && active < tracks.length) drawClip(g, tracks[active], RULER_H + tracks[active].lane * ROW_H, sc, W, C, true);
+
+    // 選択範囲
+    if (sel && active >= 0 && active < tracks.length && sel.end - sel.start > 0) {
+      const y0 = RULER_H + tracks[active].lane * ROW_H;
+      const x1 = sel.start * pps - sc, x2 = sel.end * pps - sc;
+      g.globalAlpha = 0.18; g.fillStyle = C.ink; g.fillRect(x1, y0, x2 - x1, ROW_H);
+      g.globalAlpha = 0.9; g.fillStyle = C.ink;
+      g.fillRect(Math.round(x1), y0, 1, ROW_H); g.fillRect(Math.round(x2) - 1, y0, 1, ROW_H);
+      g.globalAlpha = 1;
+    }
+
+    // 吸着ガイド
+    if (moving && drag.snapT != null) {
+      const gx = Math.round(drag.snapT * pps - sc) + 0.5;
+      g.strokeStyle = C.ink; g.globalAlpha = 0.8; g.setLineDash([4, 3]);
+      g.beginPath(); g.moveTo(gx, RULER_H); g.lineTo(gx, H); g.stroke();
+      g.setLineDash([]); g.globalAlpha = 1;
+    }
+
+    // 再生位置
+    const px = curPos() * pps - sc;
+    if (px >= -6 && px <= W + 6) {
+      g.fillStyle = C.rec; g.strokeStyle = C.rec; g.lineWidth = 1.5;
+      const xx = Math.round(px) + 0.5;
+      g.beginPath(); g.moveTo(xx, 0); g.lineTo(xx, H); g.stroke();
+      g.beginPath(); g.moveTo(xx - 6, 0); g.lineTo(xx + 6, 0); g.lineTo(xx, 9); g.closePath(); g.fill();
+      g.lineWidth = 1;
+    }
+  }
+
+  function drawClip(g, tr, y0, sc, W, C, isActive) {
+    const L = laneOf(tr);
+    const buf = tr.buffer, sr = buf.sampleRate, N = buf.length;
+    const x0 = tr.offset * pps - sc, x1 = x0 + buf.duration * pps;
+    const vx0 = Math.max(0, Math.floor(x0)), vx1 = Math.min(W, Math.ceil(x1));
+    if (vx1 <= vx0) return;
+    g.fillStyle = tr.color; g.strokeStyle = tr.color;
+    g.globalAlpha = L.mute ? 0.06 : 0.13;
+    g.fillRect(x0, y0 + 4, x1 - x0, ROW_H - 8);
+    g.globalAlpha = L.mute ? 0.3 : 0.8;
+    g.strokeRect(x0 + 0.5, y0 + 4.5, x1 - x0 - 1, ROW_H - 9);
+    if (isActive) { g.lineWidth = 2; g.globalAlpha = 1; g.strokeRect(x0 + 1, y0 + 5, x1 - x0 - 2, ROW_H - 10); g.lineWidth = 1; }
+    // 移動用の名前の帯
+    g.globalAlpha = L.mute ? 0.2 : 0.4;
+    g.fillRect(x0, y0 + 4, x1 - x0, STRIP);
+    g.save();
+    g.beginPath(); g.rect(Math.max(0, x0), y0 + 4, Math.min(W, x1) - Math.max(0, x0), STRIP); g.clip();
+    g.globalAlpha = 1; g.fillStyle = C.ink; g.textBaseline = 'middle';
+    g.fillText(tr.name, Math.max(0, x0) + 6, y0 + 4 + STRIP / 2);
+    g.restore();
+    g.fillStyle = tr.color;
+
+    const mid = y0 + MID_OFF, amp = (ROW_H - 8 - STRIP) / 2 - 4;
+    const pk = getPeaks(buf);
+    const chs = [];
+    for (let c = 0; c < buf.numberOfChannels; c++) chs.push(buf.getChannelData(c));
+    g.globalAlpha = L.mute ? 0.35 : 1;
+    for (let x = vx0; x < vx1; x++) {
+      const ta = (x + sc) / pps - tr.offset;
+      let s0 = Math.floor(ta * sr), s1 = Math.ceil((ta + 1 / pps) * sr);
+      if (s0 < 0) s0 = 0;
+      if (s1 > N) s1 = N;
+      if (s1 <= s0) continue;
+      let lo = 1, hi = -1;
+      if (s1 - s0 <= 256) {
+        for (let c = 0; c < chs.length; c++) {
+          const d = chs[c];
+          for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        }
+      } else {
+        const b0 = Math.floor(s0 / PEAK_B), b1 = Math.min(pk.min.length, Math.ceil(s1 / PEAK_B));
+        for (let b = b0; b < b1; b++) { if (pk.min[b] < lo) lo = pk.min[b]; if (pk.max[b] > hi) hi = pk.max[b]; }
+      }
+      lo = Math.max(-1, lo * L.vol); hi = Math.min(1, hi * L.vol);
+      const yTop = mid - hi * amp, yBot = mid - lo * amp;
+      g.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
+    }
+    g.globalAlpha = 1;
+  }
+
+  function updateTime() {
+    timeEl.textContent = `${fmtT(curPos())} / ${fmtT(totalDur())}`;
+    const tot = totalDur();
+    if (!seeking) seekEl.value = tot > 0 ? Math.round(curPos() / tot * 1000) : 0;
+  }
+
+  /* ---------- 再生 ---------- */
+  let playing = false, pStart = 0, pFrom = 0, pEnd = 0, nodes = [], raf = 0;
+  function curPos() {
+    if (!playing) return playhead;
+    return Math.min(pEnd, pFrom + Math.max(0, getCtx().currentTime - pStart));
+  }
+  function liveGain(laneIdx) {
+    const L = lanes[laneIdx];
+    nodes.forEach(n => { if (n.lane === laneIdx && L) n.g.gain.value = L.mute ? 0 : L.vol; });
+  }
+  function playFromTo(from, to) {
+    const c = getCtx();
+    c.resume();
+    stopPlay();
+    const when = c.currentTime + 0.06;
+    nodes = [];
+    tracks.forEach(t => {
+      const start = t.offset, end = start + t.buffer.duration;
+      if (end <= from) return;
+      if (to != null && start >= to) return;
+      const src = c.createBufferSource();
+      src.buffer = t.buffer;
+      const g = c.createGain();
+      g.gain.value = laneOf(t).mute ? 0 : laneOf(t).vol;
+      src.connect(g); g.connect(c.destination);
+      if (start >= from) src.start(when + (start - from)); else src.start(when, from - start);
+      if (to != null) src.stop(when + (to - from));
+      nodes.push({ src, g, id: t.id, lane: t.lane });
+    });
+    if (!nodes.length) { toast('この位置から先に再生できる音声がありません。'); return; }
+    playing = true; pFrom = from; pStart = when;
+    pEnd = to != null ? to : totalDur();
+    // 再生位置が画面外なら表示範囲を合わせる
+    const W = scrollEl.clientWidth, x = from * pps - scrollEl.scrollLeft;
+    if (x < 0 || x > W - 30) scrollEl.scrollLeft = Math.max(0, from * pps - 60);
+    updatePlayBtn();
+    raf = requestAnimationFrame(loop);
+  }
+  function loop() {
+    if (!playing) return;
+    const pos = curPos();
+    if (pos >= pEnd - 0.001) { playhead = pEnd; stopPlay(true); return; }
+    const W = scrollEl.clientWidth, x = pos * pps - scrollEl.scrollLeft;
+    if (x > W - 30) scrollEl.scrollLeft = Math.max(0, pos * pps - 60);
+    draw(); updateTime();
+    raf = requestAnimationFrame(loop);
+  }
+  function stopPlay(finished) {
+    if (playing && !finished) playhead = curPos();
+    playing = false;
+    cancelAnimationFrame(raf);
+    nodes.forEach(n => { try { n.src.stop(); } catch (e) {} try { n.src.disconnect(); n.g.disconnect(); } catch (e) {} });
+    nodes = [];
+    updatePlayBtn(); draw(); updateTime();
+  }
+  function updatePlayBtn() { $('btnPlay').textContent = playing ? '停止' : '再生'; }
+  function togglePlay() {
+    if (playing) { stopPlay(); return; }
+    const tot = totalDur();
+    playFromTo(playhead >= tot - 0.01 ? 0 : playhead, null);
+  }
+  function setPlayhead(t) {
+    playhead = Math.max(0, t);
+    if (playing) playFromTo(playhead, null); else { draw(); updateTime(); }
+  }
+
+  function skip(dt) { setPlayhead(Math.min(totalDur(), Math.max(0, curPos() + dt))); }
+  let seekResume = false;
+  seekEl.addEventListener('input', () => {
+    if (!seeking) { seeking = true; seekResume = playing; if (playing) stopPlay(); }
+    playhead = totalDur() * seekEl.value / 1000;
+    draw(); updateTime();
+    const W = scrollEl.clientWidth, x = playhead * pps - scrollEl.scrollLeft;
+    if (x < 0 || x > W - 30) scrollEl.scrollLeft = Math.max(0, playhead * pps - 60);
+  });
+  seekEl.addEventListener('change', () => {
+    seeking = false;
+    if (seekResume) playFromTo(playhead, null);
+    seekResume = false;
+  });
+
+  /* ---------- 編集処理 ---------- */
+  function mk(buf, len) { return getCtx().createBuffer(buf.numberOfChannels, Math.max(1, len), buf.sampleRate); }
+  function copyBuf(buf) {
+    const o = mk(buf, buf.length);
+    for (let c = 0; c < buf.numberOfChannels; c++) o.getChannelData(c).set(buf.getChannelData(c));
+    return o;
+  }
+  function needTrack() {
+    const tr = activeTrack();
+    if (!tr) { toast('先にクリップを選んでください。'); return null; }
+    return tr;
+  }
+  function withSel(fn) {
+    const tr = needTrack(); if (!tr) return;
+    const r = selSamples(tr);
+    if (!r) { toast('波形をドラッグして、範囲を選んでください。'); return; }
+    stopPlay();
+    fn(tr, r[0], r[1]);
+    commit();
+  }
+
+  function opCut() {
+    withSel((tr, a, b) => {
+      const buf = tr.buffer, n = buf.length, sr = buf.sampleRate, len = n - (b - a);
+      const pos = tr.offset + a / sr;
+      if (len < 1) {
+        tracks.splice(active, 1);
+        if (active >= tracks.length) active = tracks.length - 1;
+      } else {
+        const o = mk(buf, len);
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const s = buf.getChannelData(c), d = o.getChannelData(c);
+          d.set(s.subarray(0, a)); d.set(s.subarray(b), a);
+        }
+        tr.buffer = o;
+      }
+      playhead = pos; sel = null;
+    });
+  }
+  function opSilence() {
+    withSel((tr, a, b) => {
+      const o = copyBuf(tr.buffer);
+      for (let c = 0; c < o.numberOfChannels; c++) o.getChannelData(c).fill(0, a, b);
+      tr.buffer = o;
+    });
+  }
+  function opTrim() {
+    withSel((tr, a, b) => {
+      const buf = tr.buffer, o = mk(buf, b - a);
+      for (let c = 0; c < buf.numberOfChannels; c++) o.getChannelData(c).set(buf.getChannelData(c).subarray(a, b));
+      tr.offset += a / buf.sampleRate;
+      tr.buffer = o;
+      playhead = tr.offset; sel = null;
+    });
+  }
+  function opFade(dir) {
+    withSel((tr, a, b) => {
+      const o = copyBuf(tr.buffer), span = b - a;
+      for (let c = 0; c < o.numberOfChannels; c++) {
+        const d = o.getChannelData(c);
+        for (let i = a; i < b; i++) {
+          const r = (i - a) / span;
+          d[i] *= dir === 'in' ? r : 1 - r;
+        }
+      }
+      tr.buffer = o;
+    });
+  }
+  function opGain() {
+    const db = parseFloat($('gainDb').value);
+    if (!isFinite(db)) { toast('dB の値を入力してください。'); return; }
+    const f = Math.pow(10, db / 20);
+    withSel((tr, a, b) => {
+      const o = copyBuf(tr.buffer);
+      for (let c = 0; c < o.numberOfChannels; c++) {
+        const d = o.getChannelData(c);
+        for (let i = a; i < b; i++) d[i] *= f;
+      }
+      tr.buffer = o;
+    });
+  }
+  function opNormalize() {
+    const tr = needTrack(); if (!tr) return;
+    let peak = 0;
+    for (let c = 0; c < tr.buffer.numberOfChannels; c++) {
+      const d = tr.buffer.getChannelData(c);
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
+    }
+    if (peak === 0) { toast('このトラックは無音のため、正規化できません。'); return; }
+    stopPlay();
+    const f = 0.891 / peak;
+    const o = copyBuf(tr.buffer);
+    for (let c = 0; c < o.numberOfChannels; c++) {
+      const d = o.getChannelData(c);
+      for (let i = 0; i < d.length; i++) d[i] *= f;
+    }
+    tr.buffer = o;
+    commit();
+  }
+  function opSplit() {
+    const tr = needTrack(); if (!tr) return;
+    const pos = curPos();
+    const rel = pos - tr.offset;
+    if (rel <= 0.001 || rel >= tr.buffer.duration - 0.001) {
+      toast('再生位置が、選んだトラックの範囲内にありません。ルーラーをクリックして位置を決めてください。');
+      return;
+    }
+    stopPlay();
+    playhead = pos;
+    const buf = tr.buffer, s = Math.round(rel * buf.sampleRate);
+    const A = mk(buf, s), B = mk(buf, buf.length - s);
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      A.getChannelData(c).set(d.subarray(0, s));
+      B.getChannelData(c).set(d.subarray(s));
+    }
+    const second = { ...tr, id: nextId++, buffer: B, offset: pos, name: tr.name + ' (後半)' };
+    tr.buffer = A; tr.name = tr.name + ' (前半)';
+    tracks.splice(active + 1, 0, second);
+    sel = null;
+    commit();
+  }
+
+  /* ---------- 速度・ピッチ・EQ・ノイズ除去 ---------- */
+  const chansOf = buf => Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c));
+  function rangeOrAll(tr) { return selSamples(tr) || [0, tr.buffer.length]; }
+  function replaceRange(tr, a, b, newChs) {
+    const buf = tr.buffer, n = buf.length, nl = newChs[0].length;
+    const o = mk(buf, a + nl + (n - b));
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const s = buf.getChannelData(c), d = o.getChannelData(c);
+      d.set(s.subarray(0, a)); d.set(newChs[c], a); d.set(s.subarray(b), a + nl);
+    }
+    tr.buffer = o;
+  }
+  let busy = false;
+  async function runOp(label, fn) {
+    if (busy) return;
+    const tr = needTrack(); if (!tr) return;
+    busy = true; stopPlay();
+    toast(label + '中です…', true);
+    await new Promise(r => setTimeout(r, 30));      // 先にメッセージを描画させる
+    try { await fn(tr); }
+    catch (e) { console.error(e); toast(label + 'に失敗しました: ' + ((e && e.message) || '不明')); }
+    finally { busy = false; }
+  }
+
+  function resample(d, rate, outLen) {
+    const n = d.length, out = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const p = i * rate, i0 = Math.floor(p), f = p - i0;
+      const a = i0 < n ? d[i0] : 0, b = i0 + 1 < n ? d[i0 + 1] : a;
+      out[i] = a + (b - a) * f;
+    }
+    return out;
+  }
+  // WSOLA：ピッチを変えずに長さを ratio 倍にする（チャンネル間で同じ切り出し位置を使う）
+  function wsola(chs, ratio, sr) {
+    const n = chs[0].length, outLen = Math.max(1, Math.round(n * ratio));
+    let N = Math.round(sr * 0.04); N += N & 1; if (N < 64) N = 64;
+    const Hs = N / 2, tol = Math.max(8, Math.round(sr * 0.008));
+    const cStep = Math.max(2, Math.round(tol / 64)), iStep = Math.max(4, Math.round(Hs / 80));
+    const win = new Float32Array(N);
+    for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
+    const out = chs.map(() => new Float32Array(outLen + N)), norm = new Float32Array(outLen + N);
+    const ref = chs[0];
+    let prev = 0;
+    for (let k = 0; ; k++) {
+      const outPos = k * Hs;
+      if (outPos >= outLen) break;
+      let pos = 0;
+      if (k > 0) {
+        const target = Math.round(outPos / ratio), ideal = prev + Hs;
+        const lo = Math.max(0, target - tol), hi = Math.min(n - 1, target + tol);
+        pos = Math.min(Math.max(target, 0), Math.max(0, n - 1));
+        let best = -Infinity;
+        for (let c = lo; c <= hi; c += cStep) {
+          let sum = 0;
+          for (let i = 0; i < Hs; i += iStep) {
+            const x = c + i < n ? ref[c + i] : 0, y = ideal + i < n ? ref[ideal + i] : 0;
+            sum += x * y;
+          }
+          if (sum > best) { best = sum; pos = c; }
+        }
+      }
+      for (let i = 0; i < N; i++) {
+        norm[outPos + i] += win[i];
+        const idx = pos + i;
+        if (idx >= n) continue;
+        for (let c = 0; c < chs.length; c++) out[c][outPos + i] += chs[c][idx] * win[i];
+      }
+      prev = pos;
+    }
+    return out.map(o => {
+      const r = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) r[i] = norm[i] > 0.05 ? o[i] / norm[i] : o[i];
+      return r;
+    });
+  }
+
+  function opSpeed() {
+    const v = parseFloat($('speed').value);
+    if (!isFinite(v) || v < 0.25 || v > 4) { toast('速度は 0.25〜4 の間で入力してください。'); return; }
+    if (Math.abs(v - 1) < 1e-6) { toast('速度が 1 倍のため、変更はありません。'); return; }
+    runOp('速度の変更', async tr => {
+      const [a, b] = rangeOrAll(tr), sr = tr.buffer.sampleRate;
+      const seg = chansOf(tr.buffer).map(d => d.subarray(a, b));
+      let res;
+      if ($('speedMode').value === 'keep') res = wsola(seg, 1 / v, sr);
+      else { const len = Math.max(1, Math.round((b - a) / v)); res = seg.map(d => resample(d, v, len)); }
+      replaceRange(tr, a, b, res);
+      sel = null; commit();
+      toast(`速度を ${v} 倍にしました。`);
+    });
+  }
+  function opPitch() {
+    const st = parseFloat($('pitch').value);
+    if (!isFinite(st) || st < -12 || st > 12) { toast('ピッチは -12〜12 半音の間で入力してください。'); return; }
+    if (st === 0) { toast('0 半音のため、変更はありません。'); return; }
+    runOp('ピッチの変更', async tr => {
+      const [a, b] = rangeOrAll(tr), sr = tr.buffer.sampleRate, p = Math.pow(2, st / 12);
+      const seg = chansOf(tr.buffer).map(d => d.subarray(a, b));
+      const res = wsola(seg, p, sr).map(d => resample(d, p, b - a));   // 伸ばしてから読み出し速度を上げる＝長さそのままピッチだけ変わる
+      replaceRange(tr, a, b, res);
+      sel = null; commit();
+      toast(`ピッチを ${st > 0 ? '+' : ''}${st} 半音変えました。`);
+    });
+  }
+  function opReverse() {
+    runOp('逆再生への変換', async tr => {
+      const [a, b] = rangeOrAll(tr);
+      const res = chansOf(tr.buffer).map(d => { const r = d.slice(a, b); r.reverse(); return r; });
+      replaceRange(tr, a, b, res);
+      sel = null; commit();
+      toast('逆再生にしました。');
+    });
+  }
+
+  async function applyEq(chs, sr, p) {
+    const len = chs[0].length;
+    const off = new OfflineAudioContext(chs.length, len, sr);
+    const src = off.createBufferSource(), ab = off.createBuffer(chs.length, len, sr);
+    chs.forEach((d, c) => ab.getChannelData(c).set(d));
+    src.buffer = ab;
+    let node = src;
+    const chain = (type, freq, gain, q) => {
+      const f = off.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+      if (gain != null) f.gain.value = gain;
+      if (q != null) f.Q.value = q;
+      node.connect(f); node = f;
+    };
+    if (p.hpf > 0) { chain('highpass', Math.min(p.hpf, sr / 2 - 1), null, 0.707); chain('highpass', Math.min(p.hpf, sr / 2 - 1), null, 0.707); }
+    if (p.low) chain('lowshelf', 200, p.low);
+    if (p.mid) chain('peaking', 1000, p.mid, 0.9);
+    if (p.high && sr > 9000) chain('highshelf', 4000, p.high);
+    node.connect(off.destination);
+    src.start();
+    const r = await off.startRendering();
+    return chansOf(r).map(d => d.slice());
+  }
+  function opEq() {
+    const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+    const p = { low: num('eqLow'), mid: num('eqMid'), high: num('eqHigh'), hpf: Math.max(0, num('hpf')) };
+    if (!p.low && !p.mid && !p.high && !p.hpf) { toast('EQ の値（dB）かローカットの周波数を入力してください。'); return; }
+    runOp('EQ の適用', async tr => {
+      const [a, b] = rangeOrAll(tr);
+      const seg = chansOf(tr.buffer).map(d => d.subarray(a, b));
+      const res = await applyEq(seg, tr.buffer.sampleRate, p);
+      replaceRange(tr, a, b, res);
+      sel = null; commit();
+      toast('EQ を適用しました。');
+    });
+  }
+
+  const NR_N = 2048, NR_HOP = 512;
+  const nrWin = new Float64Array(NR_N);
+  for (let i = 0; i < NR_N; i++) nrWin[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / NR_N);
+  function fft(re, im, inv) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = 2 * Math.PI / len * (inv ? 1 : -1), wr = Math.cos(ang), wi = Math.sin(ang), h = len >> 1;
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < h; k++) {
+          const x = i + k, y = x + h;
+          const tr = re[y] * cr - im[y] * ci, ti = re[y] * ci + im[y] * cr;
+          re[y] = re[x] - tr; im[y] = im[x] - ti; re[x] += tr; im[x] += ti;
+          const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+        }
+      }
+    }
+    if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+  }
+  // 選択範囲の平均スペクトル（ノイズ見本）
+  function buildNoiseProfile(d) {
+    const prof = new Float64Array(NR_N / 2 + 1), re = new Float64Array(NR_N), im = new Float64Array(NR_N);
+    let frames = 0;
+    for (let pos = 0; pos + NR_N <= d.length; pos += NR_HOP) {
+      for (let i = 0; i < NR_N; i++) { re[i] = d[pos + i] * nrWin[i]; im[i] = 0; }
+      fft(re, im, false);
+      for (let k = 0; k <= NR_N / 2; k++) prof[k] += Math.hypot(re[k], im[k]);
+      frames++;
+    }
+    if (!frames) return null;
+    for (let k = 0; k < prof.length; k++) prof[k] /= frames;
+    return prof;
+  }
+  // スペクトル減算によるノイズ除去
+  function denoiseChannel(d, prof, alpha) {
+    const n = d.length, out = new Float32Array(n), norm = new Float32Array(n);
+    const re = new Float64Array(NR_N), im = new Float64Array(NR_N), FLOOR = 0.08;
+    for (let pos = -(NR_N - NR_HOP); pos < n; pos += NR_HOP) {
+      for (let i = 0; i < NR_N; i++) { const j = pos + i; re[i] = j >= 0 && j < n ? d[j] * nrWin[i] : 0; im[i] = 0; }
+      fft(re, im, false);
+      for (let k = 0; k <= NR_N / 2; k++) {
+        const mag = Math.hypot(re[k], im[k]);
+        const g = mag > 1e-12 ? Math.max(mag - alpha * prof[k], FLOOR * mag) / mag : 0;
+        re[k] *= g; im[k] *= g;
+        if (k > 0 && k < NR_N / 2) { re[NR_N - k] *= g; im[NR_N - k] *= g; }
+      }
+      fft(re, im, true);
+      for (let i = 0; i < NR_N; i++) {
+        const j = pos + i;
+        if (j >= 0 && j < n) { out[j] += re[i] * nrWin[i]; norm[j] += nrWin[i] * nrWin[i]; }
+      }
+    }
+    for (let i = 0; i < n; i++) if (norm[i] > 1e-6) out[i] /= norm[i];
+    return out;
+  }
+  function opNoiseProfile() {
+    const tr = activeTrack(), r = selSamples(tr);
+    if (!r) { toast('ノイズだけが鳴っている区間を、波形をドラッグして選んでください。'); return; }
+    const d = tr.buffer.getChannelData(0).subarray(r[0], r[1]);
+    const prof = d.length >= NR_N ? buildNoiseProfile(d) : null;
+    if (!prof) {
+      toast(`選択範囲が短すぎます（${(NR_N / tr.buffer.sampleRate).toFixed(2)}秒以上が必要です）。もう少し長く選んでください。`);
+      return;
+    }
+    noiseProf = prof;
+    $('nrState').textContent = `ノイズ見本: 登録済み（${fmtT((r[1] - r[0]) / tr.buffer.sampleRate)}）`;
+    refreshButtons();
+    toast('ノイズ見本を登録しました。除去したい範囲を選ぶか、未選択のまま「ノイズを除去」を押してください。');
+  }
+  function opDenoise() {
+    if (!noiseProf) { toast('先にノイズ見本を登録してください。'); return; }
+    const alpha = parseFloat($('nrLevel').value) || 1.8;
+    runOp('ノイズの除去', async tr => {
+      const [a, b] = rangeOrAll(tr);
+      const res = chansOf(tr.buffer).map(d => denoiseChannel(d.subarray(a, b), noiseProf, alpha));
+      replaceRange(tr, a, b, res);
+      sel = null; commit();
+      toast('ノイズを除去しました。音が不自然なら「元に戻す」で戻し、強さを変えて試してください。');
+    });
+  }
+
+  /* ---------- トラック追加 ---------- */
+  function addTrack(buf, name) {
+    const first = tracks.length === 0;
+    const L = { name, vol: 1, mute: false, color: COLORS[lanes.length % COLORS.length] };
+    lanes.push(L);
+    const t = { id: nextId, name, buffer: buf, offset: 0, lane: lanes.length - 1, color: L.color };
+    nextId++;
+    tracks.push(t);
+    active = tracks.length - 1; curLane = t.lane; sel = null;
+    if (first) {
+      $('edEmpty').hidden = true; $('edMain').hidden = false;   // 幅を正しく測るため先に表示する
+      const W = scrollEl.clientWidth || 800;
+      pps = Math.min(400, Math.max(10, (W - 60) / Math.max(1, buf.duration)));
+      zoomEl.value = Math.round(ppsToZoom(pps));
+      playhead = 0;
+    }
+    commit();
+  }
+  const LIGHT_RATE = 16000;
+  let lightCtx = null;
+  function getLightCtx() {
+    if (lightCtx) return lightCtx;
+    try { lightCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: LIGHT_RATE }); }
+    catch (e) { lightCtx = null; }
+    return lightCtx;
+  }
+  function toMono(buf) {
+    const o = getCtx().createBuffer(1, buf.length, buf.sampleRate);
+    const d = o.getChannelData(0), n = buf.numberOfChannels;
+    for (let c = 0; c < n; c++) {
+      const s = buf.getChannelData(c);
+      for (let i = 0; i < d.length; i++) d[i] += s[i] / n;
+    }
+    return o;
+  }
+  async function addBlob(blob, name) {
+    const light = $('quality').value === 'light';
+    toast(`「${name}」を読み込み中です…（長い音声は時間がかかります）`, true);
+    let buf;
+    try {
+      const ab = await blob.arrayBuffer();
+      const dc = light ? (getLightCtx() || getCtx()) : getCtx();   // 16kHz のコンテキストで読むと、その場で軽量化される
+      buf = await dc.decodeAudioData(ab);
+      if (light && buf.numberOfChannels > 1) buf = toMono(buf);
+    } catch (e) {
+      console.error(e);
+      const type = blob.type || '不明';
+      const mb = (blob.size / 1024 / 1024).toFixed(1);
+      const why = (e && (e.message || e.name)) || '不明';
+      toast(`「${name}」を読み込めませんでした（形式: ${type}、${mb} MB）。このブラウザでは再生できない音声の可能性があります。理由: ${why}`);
+      return false;
+    }
+    try {
+      addTrack(buf, name);
+      toast(`「${name}」を追加しました（${fmtT(buf.duration)}）。`);
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast(`「${name}」のトラック追加中にエラーが出ました: ${(e && e.message) || '不明'}`);
+      return false;
+    }
+  }
+  async function addFiles(files) {
+    for (const f of files) await addBlob(f, f.name.replace(/\.[^.]+$/, ''));
+  }
+
+  /* ---------- 書き出し ---------- */
+  function encodeWav(chData, sr) {
+    const ch = chData.length, n = chData[0].length;
+    const ab = new ArrayBuffer(44 + n * ch * 2), dv = new DataView(ab);
+    const wr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    wr(0, 'RIFF'); dv.setUint32(4, 36 + n * ch * 2, true); wr(8, 'WAVE'); wr(12, 'fmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, ch, true);
+    dv.setUint32(24, sr, true); dv.setUint32(28, sr * ch * 2, true); dv.setUint16(32, ch * 2, true);
+    dv.setUint16(34, 16, true); wr(36, 'data'); dv.setUint32(40, n * ch * 2, true);
+    let o = 44;
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < ch; c++) {
+        const v = Math.max(-1, Math.min(1, chData[c][i]));
+        dv.setInt16(o, v < 0 ? v * 0x8000 : v * 0x7FFF, true); o += 2;
+      }
+    }
+    return new Blob([ab], { type: 'audio/wav' });
+  }
+  function loadLame() {
+    if (window.lamejs) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js';
+      sc.onload = () => (window.lamejs ? res() : rej(new Error('MP3 エンコーダーの初期化に失敗しました。')));
+      sc.onerror = () => rej(new Error('MP3 エンコーダーを取得できませんでした（ネット接続が必要です）。'));
+      document.head.appendChild(sc);
+    });
+  }
+  function encodeMp3(chData, sr, kbps) {
+    const ch = chData.length, n = chData[0].length;
+    const pcm = chData.map(d => {
+      const o = new Int16Array(n);
+      for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, d[i])); o[i] = v < 0 ? v * 0x8000 : v * 0x7FFF; }
+      return o;
+    });
+    const enc = new window.lamejs.Mp3Encoder(ch, sr, kbps), parts = [];
+    for (let i = 0; i < n; i += 1152) {
+      const l = pcm[0].subarray(i, i + 1152);
+      const buf = ch > 1 ? enc.encodeBuffer(l, pcm[1].subarray(i, i + 1152)) : enc.encodeBuffer(l);
+      if (buf.length) parts.push(new Uint8Array(buf));
+    }
+    const end = enc.flush();
+    if (end.length) parts.push(new Uint8Array(end));
+    return new Blob(parts, { type: 'audio/mpeg' });
+  }
+  const MP3_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
+  async function exportAudio() {
+    const audible = tracks.filter(t => !laneOf(t).mute);
+    if (!audible.length) { toast('書き出せるトラックがありません（すべてミュートされています）。'); return; }
+    stopPlay();
+    const fmt = $('fmt').value, isMp3 = fmt !== 'wav';
+    const btn = $('btnExport'), label = btn.textContent;
+    btn.disabled = true; btn.textContent = '書き出し中…';
+    try {
+      let sr = Math.max(...audible.map(t => t.buffer.sampleRate));
+      if (isMp3) { await loadLame(); if (!MP3_RATES.includes(sr)) sr = 44100; }
+      const chN = audible.some(t => t.buffer.numberOfChannels > 1) ? 2 : 1;
+      const total = Math.max(...audible.map(t => t.offset + t.buffer.duration));
+      const off = new OfflineAudioContext(chN, Math.max(1, Math.ceil(total * sr)), sr);
+      audible.forEach(t => {
+        const src = off.createBufferSource(); src.buffer = t.buffer;
+        const g = off.createGain(); g.gain.value = laneOf(t).vol;
+        src.connect(g); g.connect(off.destination);
+        src.start(t.offset);
+      });
+      const rendered = await off.startRendering();
+      const data = [];
+      for (let c = 0; c < rendered.numberOfChannels; c++) data.push(rendered.getChannelData(c));
+      if ($('chkNorm').checked) {
+        let peak = 0;
+        data.forEach(d => { for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; } });
+        if (peak > 0) { const f = 0.891 / peak; data.forEach(d => { for (let i = 0; i < d.length; i++) d[i] *= f; }); }
+      }
+      const blob = isMp3 ? encodeMp3(data, sr, fmt === 'mp3hq' ? 192 : 128) : encodeWav(data, sr);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `mix-${stampName(new Date())}.${isMp3 ? 'mp3' : 'wav'}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast(`書き出しました（${(blob.size / 1024 / 1024).toFixed(1)} MB）。`);
+    } catch (e) {
+      console.error(e);
+      toast('書き出しに失敗しました: ' + ((e && e.message) || '音声が長すぎる可能性があります。'));
+    } finally {
+      btn.textContent = label; btn.disabled = tracks.length === 0;
+    }
+  }
+
+  /* ---------- ポインター操作 ---------- */
+  function ptr(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  const tAt = x => Math.max(0, (x + scrollEl.scrollLeft) / pps);
+  const laneAtY = y => Math.floor((y - RULER_H) / ROW_H);
+  function clipAt(lane, t) {
+    for (let k = tracks.length - 1; k >= 0; k--) {
+      const c = tracks[k];
+      if (c.lane === lane && t >= c.offset && t < c.offset + c.buffer.duration) return k;
+    }
+    return -1;
+  }
+  const inStrip = (lane, y) => { const y0 = RULER_H + lane * ROW_H + 4; return y >= y0 && y < y0 + STRIP; };
+
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    canvas.focus({ preventScroll: true });   // フォーカスでページがスクロールすると、押した位置がずれる
+    canvas.setPointerCapture(e.pointerId);
+    const { x, y } = ptr(e), t = tAt(x);
+    if (y < RULER_H) {
+      drag = { mode: 'scrub', wasPlaying: playing };
+      if (playing) stopPlay();
+      playhead = t; draw(); updateTime();
+      return;
+    }
+    const lane = laneAtY(y);
+    if (lane < 0 || lane >= lanes.length) return;
+    const ci = clipAt(lane, t);
+    if (ci >= 0) setActive(ci); else selectLane(lane);
+    const grab = ci >= 0 && inStrip(lane, y);
+    if (grab || e.shiftKey) {
+      const mi = ci >= 0 ? ci : (active >= 0 && tracks[active].lane === lane ? active : -1);
+      if (mi < 0) return;
+      drag = { mode: 'move', i: mi, t0: t, off0: tracks[mi].offset, lane0: tracks[mi].lane, moved: false };
+      canvas.style.cursor = 'grabbing';
+    } else {
+      drag = { mode: 'select', i: active, t0: t, x0: x, moved: false };
+    }
+  });
+  canvas.addEventListener('pointermove', e => {
+    const { x, y } = ptr(e), t = tAt(x);
+    if (!drag) {
+      const lane = laneAtY(y), ci = lane >= 0 && lane < lanes.length ? clipAt(lane, t) : -1;
+      canvas.style.cursor = ci >= 0 && inStrip(lane, y) ? 'grab' : 'crosshair';
+      return;
+    }
+    if (drag.mode === 'scrub') { playhead = t; draw(); updateTime(); return; }
+    if (drag.mode === 'select') {
+      if (drag.i < 0 || (!drag.moved && Math.abs(x - drag.x0) < 3)) return;
+      drag.moved = true;
+      sel = { start: Math.min(drag.t0, t), end: Math.max(drag.t0, t) };
+      draw(); refreshButtons();
+    } else if (drag.mode === 'move') {
+      const tr = tracks[drag.i];
+      let v = Math.max(0, drag.off0 + (t - drag.t0));
+      drag.snapT = null;
+      if ($('chkSnap').checked && !e.altKey) {
+        // 動かしているクリップの頭か終わりを、0秒・再生位置・他クリップの端に吸着させる
+        const dur = tr.buffer.duration, th = 8 / pps;
+        const targets = [0, curPos()];
+        tracks.forEach((c, k) => { if (k !== drag.i) targets.push(c.offset, c.offset + c.buffer.duration); });
+        let best = th, bv = null, bt = null;
+        for (const T of targets) {
+          const ds = Math.abs(v - T); if (ds < best) { best = ds; bv = T; bt = T; }
+          const de = Math.abs(v + dur - T); if (de < best) { best = de; bv = T - dur; bt = T; }
+        }
+        if (bv !== null && bv >= 0) { v = bv; drag.snapT = bt; }
+      }
+      const lane = Math.min(lanes.length, Math.max(0, laneAtY(y)));
+      if (v !== tr.offset || lane !== tr.lane) { drag.moved = true; tr.offset = v; tr.lane = lane; layout(); draw(); updateTime(); }
+    }
+  });
+  function endDrag(e) {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.mode === 'scrub') { if (d.wasPlaying) playFromTo(playhead, null); return; }
+    if (d.mode === 'select') {
+      if (!d.moved) { sel = null; setPlayhead(d.t0); refreshButtons(); }
+    } else if (d.mode === 'move') {
+      canvas.style.cursor = 'crosshair';
+      if (d.moved) {
+        const tr = tracks[d.i];
+        if (tr.lane >= lanes.length) {
+          lanes.push({ name: tr.name, vol: 1, mute: false, color: COLORS[lanes.length % COLORS.length] });
+          tr.lane = lanes.length - 1;
+        }
+        curLane = tr.lane; sel = null;
+        stopPlay(); commit();
+      } else draw();
+    }
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', () => {
+    if (drag && drag.mode === 'move') { const tr = tracks[drag.i]; tr.offset = drag.off0; tr.lane = drag.lane0; }
+    drag = null; canvas.style.cursor = 'crosshair'; layout(); draw();
+  });
+
+  /* ---------- コピー・貼り付け ---------- */
+  function opCopy() {
+    const tr = needTrack(); if (!tr) return false;
+    const r = selSamples(tr), [a, b] = r || [0, tr.buffer.length], buf = tr.buffer;
+    const o = mk(buf, b - a);
+    for (let c = 0; c < buf.numberOfChannels; c++) o.getChannelData(c).set(buf.getChannelData(c).subarray(a, b));
+    clipboard = { buf: o, name: tr.name };
+    refreshButtons();
+    toast(r ? '選択範囲をコピーしました。貼り付けたい位置を決めて「貼り付け」を押してください。' : 'クリップをコピーしました。貼り付けたい位置を決めて「貼り付け」を押してください。');
+    return true;
+  }
+  function opCutClip() {
+    const tr = needTrack(); if (!tr) return;
+    if (selSamples(tr)) { if (opCopy()) opCut(); return; }
+    if (!opCopy()) return;
+    stopPlay();
+    tracks.splice(active, 1);
+    active = -1; sel = null;
+    commit();
+    toast('クリップを切り取りました。');
+  }
+  function opPaste() {
+    if (!clipboard) { toast('先にコピーか切り取りをしてください。'); return; }
+    stopPlay();
+    const pos = playhead, dur = clipboard.buf.duration;
+    const free = L => !tracks.some(c => c.lane === L && c.offset < pos + dur && c.offset + c.buffer.duration > pos);
+    let L = -1;
+    for (let k = Math.max(0, curLane); k < lanes.length; k++) if (free(k)) { L = k; break; }
+    if (L < 0) {
+      lanes.push({ name: clipboard.name, vol: 1, mute: false, color: COLORS[lanes.length % COLORS.length] });
+      L = lanes.length - 1;
+    }
+    tracks.push({ id: nextId++, name: clipboard.name, buffer: clipboard.buf, offset: pos, lane: L, color: lanes[L].color });
+    active = tracks.length - 1; curLane = L; sel = null;
+    commit();
+    toast(`${fmtT(pos)} の位置に貼り付けました。`);
+  }
+
+  /* ---------- ボタン・キー・ドロップ ---------- */
+  $('btnPlay').addEventListener('click', togglePlay);
+  $('btnPlaySel').addEventListener('click', () => {
+    const tr = activeTrack();
+    if (!selSamples(tr)) return;
+    playFromTo(sel.start, sel.end);
+  });
+  $('btnHome').addEventListener('click', () => { setPlayhead(0); scrollEl.scrollLeft = 0; });
+  $('btnUndo').addEventListener('click', undo);
+  $('btnRedo').addEventListener('click', redo);
+  $('btnCut').addEventListener('click', opCut);
+  $('btnSilence').addEventListener('click', opSilence);
+  $('btnTrim').addEventListener('click', opTrim);
+  $('btnSplit').addEventListener('click', opSplit);
+  $('btnFadeIn').addEventListener('click', () => opFade('in'));
+  $('btnFadeOut').addEventListener('click', () => opFade('out'));
+  $('btnGain').addEventListener('click', opGain);
+  $('btnNorm').addEventListener('click', opNormalize);
+  $('btnExport').addEventListener('click', exportAudio);
+  $('fmt').addEventListener('change', () => { $('btnExport').textContent = $('fmt').value === 'wav' ? 'WAVで書き出す' : 'MP3で書き出す'; });
+  $('btnBack').addEventListener('click', () => skip(-5));
+  $('btnFwd').addEventListener('click', () => skip(5));
+  $('btnSpeed').addEventListener('click', opSpeed);
+  $('btnPitch').addEventListener('click', opPitch);
+  $('btnReverse').addEventListener('click', opReverse);
+  $('btnEq').addEventListener('click', opEq);
+  $('btnNoiseProf').addEventListener('click', opNoiseProfile);
+  $('btnDenoise').addEventListener('click', opDenoise);
+  $('btnAdd').addEventListener('click', () => fileInput.click());
+  $('btnAddLane').addEventListener('click', () => {
+    stopPlay();
+    lanes.push({ name: `トラック${lanes.length + 1}`, vol: 1, mute: false, color: COLORS[lanes.length % COLORS.length] });
+    curLane = lanes.length - 1; active = -1; sel = null;
+    commit();
+  });
+  $('btnCopy').addEventListener('click', opCopy);
+  $('btnCutClip').addEventListener('click', opCutClip);
+  $('btnPaste').addEventListener('click', opPaste);
+  $('clipOff').addEventListener('change', () => {
+    const tr = activeTrack(); if (!tr) return;
+    const v = Math.max(0, parseFloat($('clipOff').value) || 0);
+    tr.offset = v; stopPlay(); commit(true);
+  });
+  $('btnOpenEmpty').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const files = [...fileInput.files]; fileInput.value = '';
+    if (files.length) await addFiles(files);
+  });
+
+  zoomEl.addEventListener('input', () => {
+    const W = scrollEl.clientWidth || 800;
+    const centerT = (scrollEl.scrollLeft + W / 2) / pps;
+    pps = zoomToPps(+zoomEl.value);
+    layout();
+    scrollEl.scrollLeft = Math.max(0, centerT * pps - W / 2);
+    draw();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (panelEdit.hidden) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    const type = (e.target.type || '').toLowerCase();
+    const typing = (tag === 'input' && type !== 'range' && type !== 'checkbox') || tag === 'textarea' || tag === 'select';
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 'z') { if (typing) return; e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && e.key.toLowerCase() === 'y') { if (typing) return; e.preventDefault(); redo(); return; }
+    if (mod && !typing && (e.target === document.body || e.target === canvas) && tracks.length + lanes.length > 0) {
+      const k = e.key.toLowerCase();
+      if (k === 'c') { e.preventDefault(); opCopy(); return; }
+      if (k === 'x') { e.preventDefault(); opCutClip(); return; }
+      if (k === 'v') { e.preventDefault(); opPaste(); return; }
+    }
+    if (typing || mod) return;
+    const onCanvas = e.target === document.body || e.target === canvas;
+    if (!onCanvas || lanes.length === 0) return;
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); opCut(); }
+    else if (e.key.toLowerCase() === 's') { e.preventDefault(); opSplit(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -1 : -5); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? 1 : 5); }
+    else if (e.key === 'Home') { e.preventDefault(); setPlayhead(0); scrollEl.scrollLeft = 0; }
+  });
+
+  const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  ['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();                       // ブラウザが音声を直接開いてしまうのを防ぐ
+    if (!panelEdit.hidden) $('edEmpty').classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, () => $('edEmpty').classList.remove('dragover')));
+  document.addEventListener('drop', async e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    await addFiles([...e.dataTransfer.files]);
+  });
+
+  window.addEventListener('beforeunload', e => {
+    if (tracks.length > 0) { e.preventDefault(); e.returnValue = ''; }
+  });
+  refreshButtons();
+})();
+</script>
+</body>
+</html>
